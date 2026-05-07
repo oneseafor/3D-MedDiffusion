@@ -482,9 +482,11 @@ class Encoder(nn.Module):
 
             block.res2  = ResBlockX(out_channels , out_channels, norm_type=norm_type, num_groups=num_groups)
             if i != max_ds:
-                # Use kernel_size matching stride for dimensions that don't downsample
-                kernel_size = tuple(max(2, s) for s in stride)
-                padding = tuple((k-1)//2 for k in kernel_size)
+                # Use kernel_size=1 for dimensions with stride=1 to preserve size
+                # Use kernel_size=2 for dimensions with stride=2 for proper downsampling
+                kernel_size = tuple(2 if s > 1 else 1 for s in stride)
+                # padding = 0 for kernel_size=1, padding = 0 for kernel_size=2 with stride=2
+                padding = tuple(0 for _ in stride)
                 block.down = nn.Conv3d(out_channels,out_channels,kernel_size=kernel_size,stride=stride,padding=padding)
             else:
                 block.down = nn.Identity()
