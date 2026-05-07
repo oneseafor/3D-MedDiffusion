@@ -1,14 +1,14 @@
 model:
   seed: 1234
-  batch_size: 1
+  batch_size: 8
   num_workers: 8
 
   gpus: 1
-  default_root_dir: /input/your/results/dir
-  resume_from_checkpoint: input/stage1/checkpoint/path
+  default_root_dir: /home/kangchang.shen/out_put/3D-MedDiffusion/checkpoints/patchvolume_stage2
+  resume_from_checkpoint: /home/kangchang.shen/out_put/3D-MedDiffusion/checkpoints/patchvolume_stage1/last.ckpt
   max_steps: 1000000
   max_epochs: 10000
-  precision: 32
+  precision: 16
 
   perceptual_3d: False  
   embedding_dim: 8
@@ -35,4 +35,4 @@ dataset:
   root_dir: 3DMedDiffusion/config/PatchVolume_data.json
   image_channels: 1
   imgtype: CT
-  patch_size: 64
+  patch_size: 128

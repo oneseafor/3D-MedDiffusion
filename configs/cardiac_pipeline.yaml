@@ -1,0 +1,181 @@
+# ============================================================
+# 3D-MedDiffusion Cardiac Multi-Modal Pipeline Configuration
+# ============================================================
+# Configuration-driven: all paths, modalities, and generation
+# parameters are defined here. No hardcoding in source code.
+# ============================================================
+
+# --- Data Source ---
+data:
+  root_dir: "/home/zirui/yuansq/CMR-AI/0_data_CMRAI"
+  # Six-level structure: root -> center/batch -> disease -> patient -> modality -> nii.gz
+  # Modality mapping (Level 4 directory prefix -> config key)
+  modality_mapping:
+    cine4ch: "0_final_custom_cine4ch"
+    cinesax: "0_final_custom_cinesax"
+    lgesax:  "0_final_custom_lgesax"
+
+  # Disease categories to include in training (all five cardiomyopathies)
+  disease_categories:
+    - "ARVC_niigz"
+    - "RCM_niigz"
+    - "DCM_niigz"
+    - "HCM_niigz"
+    - "LVNC_niigz"
+
+  # NIfTI file naming conventions per modality
+  file_naming:
+    cine4ch: ["cine_4ch_mid.nii.gz"]
+    cinesax: ["cine_sax_down.nii.gz", "cine_sax_mid.nii.gz", "cine_sax_up.nii.gz"]
+    lgesax:  ["lge_sax_mid6.nii.gz"]
+
+  # Slice alignment strategy for cinesax (3 slices) vs lgesax (1 slice)
+  slice_alignment:
+    strategy: "mid_only"  # options: mid_only, interpolate, stack
+    # mid_only: use only cine_sax_mid.nii.gz
+    # interpolate: average all 3 cinesax slices
+    # stack: treat 3 slices as channel dimension
+
+  # Frame selection for cine data (25 frames)
+  frame_selection:
+    strategy: "mid_only"  # options: mid_only, average, stack, first, last
+    # mid_only: use frame 12 (middle of 25)
+    # average: average all frames
+    # stack: treat frames as channel dimension (requires model change)
+    # first: use frame 0
+    # last: use frame 24
+    frame_index: 12  # Used when strategy is "mid_only", "first", or "last"
+
+  # Slice selection for lge data (6 slices)
+  lge_slice_selection:
+    strategy: "mid_only"  # options: mid_only, average, stack, specific
+    # mid_only: use slice 3 (middle of 6)
+    # average: average all slices
+    # stack: treat slices as channel dimension
+    # specific: use specific slice index
+    slice_index: 3  # Used when strategy is "mid_only" or "specific"
+
+  # Input dimensions (after frame/slice selection)
+  # cine4ch: (512, 512, 1) - single frame
+  # cinesax mid: (512, 512, 1) - single frame from mid slice
+  # lgesax: (256, 256, 1) - single slice
+  input_dimensions:
+    cine4ch: [512, 512, 1]
+    cinesax: [512, 512, 1]
+    lgesax:  [256, 256, 1]
+
+# --- Model Architecture ---
+model:
+  autoencoder:
+    downsample: [8, 8, 8]
+    in_channels: 1
+    out_channels: 1
+    n_hiddens: 48
+    embedding_dim: 8
+    n_codes: 8192
+    patch_size: 128           # 训练时随机裁剪的 patch 大小 (512/4 或 256/2)
+    n_groups: 24
+
+  diffusion:
+    image_size: [16, 16, 16]  # Latent spatial size = patch_size / downsample = 128 / 8
+    in_channels: 8            # Must match embedding_dim
+    model_channels: 128
+    out_channels: 8
+    num_res_blocks: 2
+    attention_resolutions: [4, 2, 1]
+    num_heads: 4
+    num_classes: 2            # RCM and ARVC
+    class_names: ["RCM", "ARVC"]
+    # Text conditioning for knowledge base
+    text_conditioning:
+      enabled: true
+      max_text_length: 512
+      text_embed_dim: 256
+
+# --- Knowledge Base (RAG / Text Conditioning) ---
+# SEALED: 文本-影像对齐尚未实现，暂时不启用。
+# PDF 解析模块保留代码框架，待后续实现 CLIP-style 对齐后再开启。
+knowledge_base:
+  enabled: false
+  pdf_paths:
+    - "/home/regouchang/diffusion_model/2023 ESC Guidelines for the management.pdf"
+  parser:
+    library: "pymupdf"  # fitz
+    extract_sections: true
+    target_keywords:
+      - "LGE"
+      - "late gadolinium enhancement"
+      - "fibrosis"
+      - "myocardial"
+      - "RCM"
+      - "restrictive"
+      - "ARVC"
+      - "arrhythmogenic"
+      - "right ventricular"
+
+# --- Training ---
+training:
+  batch_size: 16         # H20-3e 140GB显存，可使用较大batch_size
+  learning_rate: 1.0e-4
+  num_epochs: 100
+  num_workers: 4
+  precision: "16"  # 混合精度训练，加速训练
+  gradient_clip_val: 1.0
+
+  # Autoencoder training
+  autoencoder:
+    stage1_epochs: 50
+    stage2_epochs: 20
+    disc_start: 5000
+    perceptual_weight: 2.0
+    l1_weight: 4.0
+    gan_weight: 2.0
+
+  # Diffusion training
+  diffusion:
+    timesteps: 1000
+    beta_schedule: "cosine"
+    loss_type: "l2"
+    ema_decay: 0.995
+
+# --- Generation / Export ---
+generation:
+  output_root: "/home/kangchang.shen/out_put/3D-MedDiffusion/synthetic_data"
+  target_diseases: ["RCM_niigz", "ARVC_niigz"]
+  num_patients_per_disease: 3
+  patient_id_prefix: "generated_patient_id"
+  patient_id_start: 1
+  center_name: "synthetic_center_batch"
+  modalities_to_generate:
+    - "cine4ch"
+    - "cinesax"
+    - "lgesax"
+
+  # Output volume dimensions (voxels) - 必须与输入数据一致
+  # cine4ch: 512×512 单帧
+  # cinesax: 512×512 单帧 (mid slice)
+  # lgesax: 256×256 单切片 (每个患者输出2个lge文件)
+  volume_sizes:
+    cine4ch: [512, 512, 1]
+    cinesax: [512, 512, 1]
+    lgesax:  [256, 256, 1]
+    lgesax2: [256, 256, 1]  # 第二个lge文件
+
+  # LGE output naming
+  lge_output_naming:
+    lgesax: "lge_sax_mid.nii.gz"    # 第一个lge文件名
+    lgesax2: "lge_sax_mid6.nii.gz"  # 第二个lge文件名
+
+  # Sampling parameters
+  sampling:
+    strategy: "ddim"
+    ddim_steps: 50
+    eta: 0.0
+
+# --- Logging ---
+logging:
+  log_dir: "/home/kangchang.shen/out_put/3D-MedDiffusion/logs"
+  activity_log: "/home/kangchang.shen/out_put/3D-MedDiffusion/activity_log.md"
+  save_checkpoints: true
+  checkpoint_dir: "/home/kangchang.shen/out_put/3D-MedDiffusion/checkpoints"
+  log_interval: 10

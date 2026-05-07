@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment
+med_diffusion_env/
+.conda/
+*.env
+
+# Generated outputs (too large for git)
+synthetic_output/
+logs/
+checkpoints/
+
+# NIfTI data files (binary, too large)
+*.nii.gz
+
+# PyTorch model weights
+*.pt
+*.pth
+*.ckpt
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary
+*.tmp
+*.swp
+*~
