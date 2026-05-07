@@ -482,7 +482,10 @@ class Encoder(nn.Module):
 
             block.res2  = ResBlockX(out_channels , out_channels, norm_type=norm_type, num_groups=num_groups)
             if i != max_ds:
-                block.down = nn.Conv3d(out_channels,out_channels,kernel_size=(4, 4, 4),stride=stride,padding=1)
+                # Use kernel_size matching stride for dimensions that don't downsample
+                kernel_size = tuple(max(2, s) for s in stride)
+                padding = tuple((k-1)//2 for k in kernel_size)
+                block.down = nn.Conv3d(out_channels,out_channels,kernel_size=kernel_size,stride=stride,padding=padding)
             else:
                 block.down = nn.Identity()
             self.conv_blocks.append(block)
@@ -539,7 +542,7 @@ class Decoder(nn.Module):
                 block.res1 = ResBlockX(in_channels, out_channels, norm_type=norm_type, num_groups=num_groups)
             block.res2 = ResBlockX(out_channels, out_channels, norm_type=norm_type, num_groups=num_groups)
             if i != max_us :
-                block.up = Upsample(out_channels)
+                block.up = Upsample(out_channels, stride=us)
             else:
                 block.up = nn.Identity(out_channels)
             self.conv_blocks.append(block)
@@ -591,10 +594,13 @@ class ResBlockX(nn.Module):
 
 
 class Upsample(nn.Module):
-    def __init__(self, in_channels):
+    def __init__(self, in_channels, stride=(2, 2, 2)):
         super().__init__()
-        self.conv_trans = nn.ConvTranspose3d(in_channels, in_channels, 4,
-                                        stride=2, padding=1)
+        # Use stride to control which dimensions to upsample
+        # For cardiac data: stride=(1, 2, 2) to only upsample H, W
+        # kernel_size should match stride for proper upsample
+        self.conv_trans = nn.ConvTranspose3d(in_channels, in_channels, stride,
+                                        stride=stride, padding=0)
 
     def forward(self, x):
         x = self.conv_trans(x)
