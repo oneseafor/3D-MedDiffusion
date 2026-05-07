@@ -466,6 +466,14 @@ class CardiacMultiModalDataset(Dataset):
             pd = self.patch_depth
             result["volume"] = torch.zeros(ps, ps, pd, dtype=torch.float32)
 
+        # Add 'data' key for compatibility with PatchVolume.py
+        # PatchVolume expects batch['data'] with shape (B, C, D, H, W)
+        # Our volume is (H, W, D), need to convert to (C, D, H, W)
+        vol_tensor = result["volume"]  # (H, W, D)
+        vol_tensor = vol_tensor.permute(2, 0, 1)  # (D, H, W)
+        vol_tensor = vol_tensor.unsqueeze(0)  # (1, D, H, W)
+        result["data"] = vol_tensor
+
         # Store all modalities for generation/export
         for mod_key, vol in loaded_volumes.items():
             if vol.ndim == 2:
