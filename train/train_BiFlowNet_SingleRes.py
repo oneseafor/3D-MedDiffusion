@@ -1,6 +1,7 @@
 
 import sys
 import os
+import yaml
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, ".."))
 sys.path.append(project_root)
@@ -25,6 +26,7 @@ from torch.cuda.amp import autocast, GradScaler
 import random
 from torch.optim.lr_scheduler import StepLR
 from dataset.Singleres_dataset import Singleres_dataset
+from data_loaders.cardiac_dataset import CardiacMultiModalDataset
 from torch.utils.data import DataLoader
 #################################################################################
 #                             Training Helper Functions                         #
@@ -214,11 +216,47 @@ def main(args):
         del checkpoint 
         logger.info(f'Using checkpoint: {args.ckpt}')
     # Setup data:
+    if args.modality:
+        # Load cardiac config
+        cardiac_config_path = os.path.join(project_root, "configs", "cardiac_pipeline.yaml")
+        with open(cardiac_config_path, 'r') as f:
+            cardiac_config = yaml.safe_load(f)
 
-    dataset = Singleres_dataset(args.data_path, resolution=args.resolution)
+        # Get model config based on modality
+        model_cfg = cardiac_config["model"][args.modality]
+
+        # Create cardiac dataset
+        dataset = CardiacMultiModalDataset(
+            root_dir=cardiac_config["data"]["root_dir"],
+            modality_mapping=cardiac_config["data"]["modality_mapping"],
+            disease_categories=cardiac_config["data"]["disease_categories"],
+            file_naming=cardiac_config["data"]["file_naming"],
+            modality_type=args.modality,
+            slice_alignment=cardiac_config["data"]["slice_alignment"]["strategy"],
+            frame_selection=cardiac_config["data"]["frame_selection"]["strategy"],
+            lge_frame_selection=cardiac_config["data"]["lge_frame_selection"]["strategy"],
+            patch_size=model_cfg["autoencoder"]["patch_size"],
+            patch_depth=model_cfg["autoencoder"]["patch_depth"],
+            stage=1,
+            augment=True,
+        )
+
+        # Update args with cardiac config
+        args.batch_size = cardiac_config["training"][args.modality]["batch_size"]
+        args.resolution = model_cfg["diffusion"]["image_size"]
+        args.num_classes = len(cardiac_config["data"]["disease_categories"])
+
+        print(f"Using cardiac dataset for {args.modality} modality")
+        print(f"  Patients: {len(dataset)}")
+        print(f"  Resolution: {args.resolution}")
+        print(f"  Batch size: {args.batch_size}")
+    else:
+        # Use original dataset
+        dataset = Singleres_dataset(args.data_path, resolution=args.resolution)
+
     loader = DataLoader(
         dataset=dataset,
-        batch_size = args.batch_size, 
+        batch_size = args.batch_size,
         num_workers=args.num_workers,
         shuffle=True,
     )
@@ -334,7 +372,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-path", type=str, required=True)
+    parser.add_argument("--data-path", type=str, help="Data path for original dataset")
     parser.add_argument("--results-dir", type=str, required=True)
     parser.add_argument("--loss-type", type=str, default='l1')
     parser.add_argument("--volume-channels", type=int, default=8)
@@ -350,12 +388,17 @@ if __name__ == "__main__":
     parser.add_argument("--num-classes", type=int, default=7)
     parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument("--global-seed", type=int, default=0)
-    parser.add_argument("--num-workers", type=int, default=8) 
+    parser.add_argument("--num-workers", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument('--resolution', nargs='+', type=int, default=[32, 32, 32])
     parser.add_argument("--log-every", type=int, default=50)
     parser.add_argument("--ckpt-every", type=int, default=500)
     parser.add_argument("--ckpt", type=str, default=None)
     parser.add_argument("--vq-size", type=int, default=64)
+    parser.add_argument("--modality", type=str, choices=["cine", "lge"], help="Modality type: cine or lge")
     args = parser.parse_args()
+
+    if not args.modality and not args.data_path:
+        parser.error("Either --modality or --data-path must be specified")
+
     main(args)

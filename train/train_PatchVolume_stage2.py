@@ -1,6 +1,7 @@
 
 import sys
 import os
+import yaml
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, ".."))
 sys.path.append(project_root)
@@ -12,25 +13,79 @@ from AutoEncoder.model.PatchVolume import patchvolumeAE,AE_finetuning
 from train.callbacks import VolumeLogger
 from dataset.vqgan_4x import VQGANDataset_4x
 from dataset.vqgan import VQGANDataset
+from data_loaders.cardiac_dataset import CardiacMultiModalDataset
 import argparse
 from omegaconf import OmegaConf
 import torch
 os.environ["PL_TORCH_DISTRIBUTED_BACKEND"] = "gloo"
 
-def main(cfg_path: str):
+def main(cfg_path: str, modality: str = None):
     cfg = OmegaConf.load(cfg_path)
     pl.seed_everything(cfg.model.seed)
-    downsample_ratio = cfg.model.downsample[0]
-    if downsample_ratio == 4:
-        train_dataset = VQGANDataset_4x(
-            root_dir=cfg.dataset.root_dir,augmentation=True,split='train',stage=cfg.model.stage)
-        val_dataset = VQGANDataset_4x(
-            root_dir=cfg.dataset.root_dir,augmentation=False,split='val')
+
+    # Check if using cardiac dataset (modality specified)
+    if modality:
+        # Load cardiac config
+        cardiac_config_path = os.path.join(project_root, "configs", "cardiac_pipeline.yaml")
+        with open(cardiac_config_path, 'r') as f:
+            cardiac_config = yaml.safe_load(f)
+
+        # Get model config based on modality
+        model_cfg = cardiac_config["model"][modality]
+
+        # Create cardiac dataset
+        train_dataset = CardiacMultiModalDataset(
+            root_dir=cardiac_config["data"]["root_dir"],
+            modality_mapping=cardiac_config["data"]["modality_mapping"],
+            disease_categories=cardiac_config["data"]["disease_categories"],
+            file_naming=cardiac_config["data"]["file_naming"],
+            modality_type=modality,
+            slice_alignment=cardiac_config["data"]["slice_alignment"]["strategy"],
+            frame_selection=cardiac_config["data"]["frame_selection"]["strategy"],
+            lge_frame_selection=cardiac_config["data"]["lge_frame_selection"]["strategy"],
+            patch_size=model_cfg["autoencoder"]["patch_size"],
+            patch_depth=model_cfg["autoencoder"]["patch_depth"],
+            stage=2,
+            augment=True,
+        )
+
+        val_dataset = CardiacMultiModalDataset(
+            root_dir=cardiac_config["data"]["root_dir"],
+            modality_mapping=cardiac_config["data"]["modality_mapping"],
+            disease_categories=cardiac_config["data"]["disease_categories"],
+            file_naming=cardiac_config["data"]["file_naming"],
+            modality_type=modality,
+            slice_alignment=cardiac_config["data"]["slice_alignment"]["strategy"],
+            frame_selection=cardiac_config["data"]["frame_selection"]["strategy"],
+            lge_frame_selection=cardiac_config["data"]["lge_frame_selection"]["strategy"],
+            patch_size=model_cfg["autoencoder"]["patch_size"],
+            patch_depth=model_cfg["autoencoder"]["patch_depth"],
+            stage=2,
+            augment=False,
+        )
+
+        # Update cfg with cardiac model config
+        cfg.model.downsample = model_cfg["autoencoder"]["downsample"]
+        cfg.model.patch_size = model_cfg["autoencoder"]["patch_size"]
+        cfg.model.batch_size = cardiac_config["training"][modality]["batch_size"]
+
+        print(f"Using cardiac dataset for {modality} modality")
+        print(f"  Patch size: {model_cfg['autoencoder']['patch_size']}")
+        print(f"  Patch depth: {model_cfg['autoencoder']['patch_depth']}")
+        print(f"  Downsample: {model_cfg['autoencoder']['downsample']}")
     else:
-        train_dataset = VQGANDataset(
-            root_dir=cfg.dataset.root_dir,augmentation=True,split='train',stage=cfg.model.stage)
-        val_dataset = VQGANDataset(
-            root_dir=cfg.dataset.root_dir,augmentation=False,split='val')
+        # Use original dataset
+        downsample_ratio = cfg.model.downsample[0]
+        if downsample_ratio == 4:
+            train_dataset = VQGANDataset_4x(
+                root_dir=cfg.dataset.root_dir,augmentation=True,split='train',stage=cfg.model.stage)
+            val_dataset = VQGANDataset_4x(
+                root_dir=cfg.dataset.root_dir,augmentation=False,split='val')
+        else:
+            train_dataset = VQGANDataset(
+                root_dir=cfg.dataset.root_dir,augmentation=True,split='train',stage=cfg.model.stage)
+            val_dataset = VQGANDataset(
+                root_dir=cfg.dataset.root_dir,augmentation=False,split='val')
 
     train_dataloader = DataLoader(dataset=train_dataset, batch_size=cfg.model.batch_size,shuffle=True,
                                   num_workers=cfg.model.num_workers)
@@ -80,11 +135,12 @@ def main(cfg_path: str):
 
 
 if __name__ == '__main__':
-    
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True)
+    parser.add_argument("--modality", type=str, choices=["cine", "lge"], help="Modality type: cine or lge")
     args = parser.parse_args()
-    main(args.config)
+    main(args.config, args.modality)
 
 
 
