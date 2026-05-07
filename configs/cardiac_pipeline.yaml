@@ -48,7 +48,7 @@ model:
   # Cine 模型 (cine4ch + cinesax, D=25)
   cine:
     autoencoder:
-      downsample: [8, 8, 8]
+      downsample: [1, 8, 8]   # D维度不下采样（时间帧）
       in_channels: 1
       out_channels: 1
       n_hiddens: 48
@@ -58,7 +58,7 @@ model:
       patch_depth: 25        # 完整25帧
       n_groups: 24
     diffusion:
-      image_size: [16, 16, 25]
+      image_size: [25, 16, 16]
       in_channels: 8
       model_channels: 128
       out_channels: 8
@@ -71,7 +71,7 @@ model:
   # LGE 模型 (lgesax, D=6)
   lge:
     autoencoder:
-      downsample: [8, 8, 1]   # D维度不下采样
+      downsample: [1, 8, 8]   # D维度不下采样（时间帧）
       in_channels: 1
       out_channels: 1
       n_hiddens: 48
@@ -81,7 +81,7 @@ model:
       patch_depth: 6           # 完整6帧
       n_groups: 24
     diffusion:
-      image_size: [16, 16, 6]
+      image_size: [6, 16, 16]
       in_channels: 8
       model_channels: 128
       out_channels: 8
