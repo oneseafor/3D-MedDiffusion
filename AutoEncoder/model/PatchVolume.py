@@ -222,24 +222,40 @@ class patchvolumeAE(pl.LightningModule):
     def forward(self, x, optimizer_idx=None, log_volume=False,val=False):
         B, C, D, H, W = x.shape ##ｂ　ｃ　ｚ　ｘ　ｙ
 
-        if self.stage == 1 and val==False:
+        # Check if all dimensions are >= patch_size for unfold
+        can_unfold = (D >= self.patch_size) and (H >= self.patch_size) and (W >= self.patch_size)
+
+        if self.stage == 1:
+            # Stage 1: no unfold needed for both train and val
             x_input = x
 
-        else:
+        elif can_unfold:
+            # Stage 2 with large enough dimensions: unfold all
             x_input = x.unfold(2,self.patch_size,self.patch_size).unfold(3,self.patch_size,self.patch_size).unfold(4,self.patch_size,self.patch_size)
             x_input = rearrange(x_input , 'b c p1 p2 p3 d h w -> (b p1 p2 p3) c d h w')
 
-        z = self.pre_vq_conv(self.encoder(x_input)) 
+        else:
+            # Stage 2 with small D (e.g., cardiac MRI): use directly
+            x_input = x
+
+        z = self.pre_vq_conv(self.encoder(x_input))
         vq_output = self.codebook(z)
         embeddings = vq_output['embeddings']
 
-        if self.stage == 1 and val == False:
+        if self.stage == 1:
+            # Stage 1: direct decode for both train and val
             x_recon = self.decoder(self.post_vq_conv(embeddings))
 
         else:
-            embeddings = rearrange(embeddings, '(b p) c d h w -> b p c d h w', b=B) 
-            embeddings = rearrange(embeddings, 'b (p1 p2 p3) c d h w -> b c (p1 d) (p2 h) (p3 w)',
-                        p1=D//self.patch_size, p2=H//self.patch_size, p3=W//self.patch_size)
+            # Stage 2: need to rearrange patches
+            if can_unfold:
+                # Original path: unfold all dimensions
+                embeddings = rearrange(embeddings, '(b p) c d h w -> b p c d h w', b=B)
+                embeddings = rearrange(embeddings, 'b (p1 p2 p3) c d h w -> b c (p1 d) (p2 h) (p3 w)',
+                            p1=D//self.patch_size, p2=H//self.patch_size, p3=W//self.patch_size)
+            else:
+                # Dimensions too small for unfold: use directly
+                pass
             x_recon = self.decoder(self.post_vq_conv(embeddings))
         # elif self.stage==1 and val == True:
         #     embeddings = rearrange(embeddings, '(b p) c d h w -> b p c d h w', b=B) 
