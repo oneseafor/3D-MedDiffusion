@@ -56,12 +56,12 @@ data:
     slice_index: 3  # Used when strategy is "mid_only" or "specific"
 
   # Input dimensions (after frame/slice selection)
-  # cine4ch: (512, 512, 1) - single frame
-  # cinesax mid: (512, 512, 1) - single frame from mid slice
+  # cine4ch: (256, 256, 1) - single frame
+  # cinesax mid: (256, 256, 1) - single frame from mid slice
   # lgesax: (256, 256, 1) - single slice
   input_dimensions:
-    cine4ch: [512, 512, 1]
-    cinesax: [512, 512, 1]
+    cine4ch: [256, 256, 1]
+    cinesax: [256, 256, 1]
     lgesax:  [256, 256, 1]
 
 # --- Model Architecture ---
@@ -152,12 +152,12 @@ generation:
     - "lgesax"
 
   # Output volume dimensions (voxels) - 必须与输入数据一致
-  # cine4ch: 512×512 单帧
-  # cinesax: 512×512 单帧 (mid slice)
+  # cine4ch: 256×256 单帧
+  # cinesax: 256×256 单帧 (mid slice)
   # lgesax: 256×256 单切片 (每个患者输出2个lge文件)
   volume_sizes:
-    cine4ch: [512, 512, 1]
-    cinesax: [512, 512, 1]
+    cine4ch: [256, 256, 1]
+    cinesax: [256, 256, 1]
     lgesax:  [256, 256, 1]
     lgesax2: [256, 256, 1]  # 第二个lge文件
 

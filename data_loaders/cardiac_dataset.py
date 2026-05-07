@@ -202,25 +202,56 @@ class CardiacMultiModalDataset(Dataset):
             return slices[len(slices) // 2]
 
     def _select_frame(self, volume: np.ndarray) -> np.ndarray:
-        """Select frame from cine data (4D: H, W, D, T -> 3D: H, W, D)."""
-        if volume.ndim != 4:
-            return volume
+        """
+        Select frame from cine data.
 
-        num_frames = volume.shape[3]
+        Handles both:
+        - 4D: (H, W, D, T) -> (H, W, D)
+        - 3D: (H, W, T) -> (H, W, 1) when T is time frames
+        """
+        if volume.ndim == 4:
+            # 4D data: (H, W, D, T)
+            num_frames = volume.shape[3]
+            if self.frame_selection == "mid_only":
+                frame_idx = num_frames // 2
+                return volume[:, :, :, frame_idx]
+            elif self.frame_selection == "average":
+                return np.mean(volume, axis=3)
+            elif self.frame_selection == "stack":
+                return volume
+            elif self.frame_selection == "first":
+                return volume[:, :, :, 0]
+            elif self.frame_selection == "last":
+                return volume[:, :, :, -1]
+            else:
+                return volume[:, :, :, num_frames // 2]
 
-        if self.frame_selection == "mid_only":
-            frame_idx = num_frames // 2
-            return volume[:, :, :, frame_idx]
-        elif self.frame_selection == "average":
-            return np.mean(volume, axis=3)
-        elif self.frame_selection == "stack":
-            return volume  # Keep as 4D, treat frames as channels
-        elif self.frame_selection == "first":
-            return volume[:, :, :, 0]
-        elif self.frame_selection == "last":
-            return volume[:, :, :, -1]
-        else:
-            return volume[:, :, :, num_frames // 2]
+        elif volume.ndim == 3:
+            # 3D data: check if last dim is time frames
+            # If D=1 and T>1, it's likely (H, W, T)
+            # We treat last dim as time if it's > 1 and matches expected frame count
+            h, w, d = volume.shape
+
+            # Heuristic: if d > 1, treat as time frames
+            if d > 1:
+                if self.frame_selection == "mid_only":
+                    frame_idx = d // 2
+                    return volume[:, :, frame_idx:frame_idx+1]
+                elif self.frame_selection == "average":
+                    avg = np.mean(volume, axis=2)
+                    return avg[:, :, np.newaxis]
+                elif self.frame_selection == "stack":
+                    return volume
+                elif self.frame_selection == "first":
+                    return volume[:, :, 0:1]
+                elif self.frame_selection == "last":
+                    return volume[:, :, -1:]
+                else:
+                    return volume[:, :, d // 2:d // 2 + 1]
+            else:
+                return volume
+
+        return volume
 
     def _select_lge_slice(self, volume: np.ndarray) -> np.ndarray:
         """Select slice from lge data (3D: H, W, S -> 3D: H, W, 1)."""
