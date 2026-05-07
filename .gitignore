@@ -37,3 +37,7 @@ Thumbs.db
 *.tmp
 *.swp
 *~
+
+# Activity logs (keep template, ignore dates)
+活动日志/*.md
+!活动日志/README.md
