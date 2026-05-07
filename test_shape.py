@@ -37,6 +37,10 @@ def test_shape(modality="cine"):
             "gan_feat_weight": 4,
             "perceptual_3d": False,
             "stage": 1,
+            "no_random_restart": False,
+            "restart_thres": 1.0,
+            "disc_channels": 32,
+            "disc_layers": 3,
         },
         "dataset": {
             "patch_size": model_cfg["autoencoder"]["patch_size"],
