@@ -39,12 +39,10 @@ class CardiacMultiModalDataset(Dataset):
         modality_mapping: Dict[str, str],
         disease_categories: List[str],
         file_naming: Dict[str, List[str]],
+        modality_type: str = "cine",  # "cine" or "lge"
         slice_alignment: str = "mid_only",
-        frame_selection: str = "mid_only",
-        frame_index: int = 12,
-        lge_slice_selection: str = "mid_only",
-        lge_slice_index: int = 3,
         patch_size: int = 128,
+        patch_depth: int = 25,  # D维度：cine=25, lge=6
         stage: int = 1,
         augment: bool = True,
         normalize: bool = True,
@@ -54,12 +52,10 @@ class CardiacMultiModalDataset(Dataset):
         self.modality_mapping = modality_mapping
         self.disease_categories = disease_categories
         self.file_naming = file_naming
+        self.modality_type = modality_type
         self.slice_alignment = slice_alignment
-        self.frame_selection = frame_selection
-        self.frame_index = frame_index
-        self.lge_slice_selection = lge_slice_selection
-        self.lge_slice_index = lge_slice_index
         self.patch_size = patch_size
+        self.patch_depth = patch_depth
         self.stage = stage
         self.augment = augment
         self.normalize = normalize
@@ -148,43 +144,117 @@ class CardiacMultiModalDataset(Dataset):
             # Stack along last axis if multiple volumes
             return np.stack(volumes, axis=-1)
 
-    def _load_lgesax(self, patient_path: Path) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    def _load_lgesax(self, patient_path: Path) -> List[Optional[np.ndarray]]:
         """
-        Load lgesax data from multiple lge folders.
-        Each patient may have multiple lge folders (e.g., 2-3 folders).
-        Returns 2 lge volumes: mid slice and another slice.
+        Load lgesax data from lge folder.
+        LGE data is single-slice 6-frame: (256, 256, 6)
+        Returns list of frames based on lge_frame_selection strategy.
         """
         lge_prefix = self.modality_mapping.get("lgesax", "0_final_custom_lgesax")
 
-        # Find all lge folders
+        # Find lge folder
         lge_folders = sorted([
             d for d in patient_path.iterdir()
             if d.is_dir() and d.name.startswith(lge_prefix)
         ])
 
         if not lge_folders:
-            return None, None
+            return []
 
-        # Load volumes from each folder
-        lge_volumes = []
-        for folder in lge_folders:
-            nii_files = sorted(folder.glob("*.nii.gz"))
-            if nii_files:
-                vol = self._load_nifti_volume(nii_files[0])
+        # Load volume from first folder
+        folder = lge_folders[0]
+        nii_files = sorted(folder.glob("*.nii.gz"))
+
+        if not nii_files:
+            return []
+
+        vol = self._load_nifti_volume(nii_files[0])
+        if vol is None:
+            return []
+
+        # Handle based on lge_frame_selection strategy
+        if self.lge_frame_selection == "all_frames":
+            # Output each frame separately
+            # vol shape: (H, W, 6) -> 6 outputs of (H, W, 1)
+            if vol.ndim == 3 and vol.shape[2] > 1:
+                frames = []
+                for i in range(vol.shape[2]):
+                    frame = vol[:, :, i:i+1]
+                    frames.append(frame)
+                return frames
+            else:
+                return [vol]
+        elif self.lge_frame_selection == "mid_only":
+            # Select middle frame
+            if vol.ndim == 3 and vol.shape[2] > 1:
+                mid_idx = vol.shape[2] // 2
+                return [vol[:, :, mid_idx:mid_idx+1]]
+            else:
+                return [vol]
+        elif self.lge_frame_selection == "average":
+            # Average all frames
+            if vol.ndim == 3 and vol.shape[2] > 1:
+                avg = np.mean(vol, axis=2)
+                return [avg[:, :, np.newaxis]]
+            else:
+                return [vol]
+        elif self.lge_frame_selection == "first":
+            if vol.ndim == 3 and vol.shape[2] > 1:
+                return [vol[:, :, 0:1]]
+            else:
+                return [vol]
+        elif self.lge_frame_selection == "last":
+            if vol.ndim == 3 and vol.shape[2] > 1:
+                return [vol[:, :, -1:]]
+            else:
+                return [vol]
+        else:
+            # Default: return as is
+            return [vol]
+
+    def _load_cinesax_slices(self, patient_path: Path) -> List[Optional[np.ndarray]]:
+        """
+        Load cinesax data from multiple slice folders.
+        Returns list of cine volumes (down, mid, up).
+        """
+        cinesax_prefix = self.modality_mapping.get("cinesax", "0_final_custom_cinesax")
+
+        # Find cinesax folder
+        matching_dirs = [
+            d for d in patient_path.iterdir()
+            if d.is_dir() and d.name.startswith(cinesax_prefix)
+        ]
+
+        if not matching_dirs:
+            return []
+
+        cinesax_dir = matching_dirs[0]
+
+        # Load all slice files
+        slice_files = ["cine_sax_down.nii.gz", "cine_sax_mid.nii.gz", "cine_sax_up.nii.gz"]
+        slices = []
+
+        for fname in slice_files:
+            fpath = cinesax_dir / fname
+            if fpath.exists():
+                vol = self._load_nifti_volume(fpath)
                 if vol is not None:
-                    lge_volumes.append(vol)
+                    # Select frame if needed
+                    if vol.ndim == 4 or (vol.ndim == 3 and vol.shape[2] > 1):
+                        vol = self._select_frame(vol)
+                    slices.append(vol)
 
-        if not lge_volumes:
-            return None, None
+        # Fallback: try to load any .nii.gz files
+        if not slices:
+            nii_files = sorted(cinesax_dir.glob("*.nii.gz"))
+            for f in nii_files[:3]:
+                vol = self._load_nifti_volume(f)
+                if vol is not None:
+                    if vol.ndim == 4 or (vol.ndim == 3 and vol.shape[2] > 1):
+                        vol = self._select_frame(vol)
+                    slices.append(vol)
 
-        # If only one lge folder, duplicate it
-        if len(lge_volumes) == 1:
-            return lge_volumes[0], lge_volumes[0].copy()
-
-        # If multiple lge folders, use first two
-        # lge_volumes[0] = first lge (e.g., mid slice)
-        # lge_volumes[1] = second lge (e.g., another slice)
-        return lge_volumes[0], lge_volumes[1]
+        return slices
 
     def _align_cinesax(self, slices: List[np.ndarray]) -> np.ndarray:
         """Align cinesax multi-slice data based on configured strategy."""
@@ -297,21 +367,40 @@ class CardiacMultiModalDataset(Dataset):
         return vol
 
     def _extract_patch(self, vol: np.ndarray) -> np.ndarray:
-        """Extract a random patch of size patch_size^3 from the volume."""
+        """
+        Extract a random patch from the volume.
+        H, W: random crop of patch_size
+        D: use full depth (patch_depth)
+        """
         shape = vol.shape
         ps = self.patch_size
+        pd = self.patch_depth
 
-        # Pad if volume is smaller than patch size
-        for i in range(3):
+        # Pad H, W if smaller than patch_size
+        for i in range(2):
             if shape[i] < ps:
                 pad_width = [(0, 0)] * 3
                 pad_width[i] = (0, ps - shape[i])
                 vol = np.pad(vol, pad_width, mode='constant', constant_values=0)
                 shape = vol.shape
 
-        # Random crop
-        starts = [np.random.randint(0, max(1, shape[i] - ps + 1)) for i in range(3)]
-        patch = vol[starts[0]:starts[0]+ps, starts[1]:starts[1]+ps, starts[2]:starts[2]+ps]
+        # Pad D if smaller than patch_depth
+        if shape[2] < pd:
+            pad_width = [(0, 0), (0, 0), (0, pd - shape[2])]
+            vol = np.pad(vol, pad_width, mode='constant', constant_values=0)
+            shape = vol.shape
+
+        # Random crop for H, W
+        start_h = np.random.randint(0, max(1, shape[0] - ps + 1))
+        start_w = np.random.randint(0, max(1, shape[1] - ps + 1))
+
+        # For D, use full depth or crop to patch_depth
+        if shape[2] > pd:
+            start_d = np.random.randint(0, shape[2] - pd + 1)
+        else:
+            start_d = 0
+
+        patch = vol[start_h:start_h+ps, start_w:start_w+ps, start_d:start_d+pd]
         return patch
 
     def __len__(self) -> int:
@@ -326,55 +415,52 @@ class CardiacMultiModalDataset(Dataset):
             "center": patient["center"],
         }
 
-        # Load each modality
+        # Load data based on modality_type
         loaded_volumes = {}
-        for mod_key in ["cine4ch", "cinesax"]:
-            if mod_key in patient["modalities"]:
-                vol = self._load_modality(patient["modalities"][mod_key], mod_key)
-                if vol is not None:
-                    # Handle cine data (4D: H, W, D, T -> 3D: H, W, D)
-                    if vol.ndim == 4:
-                        vol = self._select_frame(vol)
 
+        if self.modality_type == "cine":
+            # Load cine4ch (25 frames, keep all)
+            if "cine4ch" in patient["modalities"]:
+                vol = self._load_modality(patient["modalities"]["cine4ch"], "cine4ch")
+                if vol is not None:
+                    # Ensure 3D: (H, W, D)
+                    if vol.ndim == 2:
+                        vol = vol[:, :, np.newaxis]
                     if self.normalize:
                         vol = self._normalize_volume(vol)
                     vol = self._random_augment(vol)
-                    loaded_volumes[mod_key] = vol
+                    loaded_volumes["cine4ch"] = vol
 
-        # Load lgesax (special handling for multiple folders)
-        lge1, lge2 = self._load_lgesax(patient["patient_path"])
-        if lge1 is not None:
-            # Handle lge data (3D: H, W, S -> 3D: H, W, 1)
-            if lge1.ndim == 3 and lge1.shape[2] > 1:
-                lge1 = self._select_lge_slice(lge1)
-            if lge2.ndim == 3 and lge2.shape[2] > 1:
-                lge2 = self._select_lge_slice(lge2)
+            # Load cinesax (3 slices × 25 frames, keep all)
+            cinesax_slices = self._load_cinesax_slices(patient["patient_path"])
+            for i, vol in enumerate(cinesax_slices):
+                if vol is not None:
+                    if self.normalize:
+                        vol = self._normalize_volume(vol)
+                    vol = self._random_augment(vol)
+                    loaded_volumes[f"cinesax_{i}"] = vol
 
-            if self.normalize:
-                lge1 = self._normalize_volume(lge1)
-                lge2 = self._normalize_volume(lge2)
+        elif self.modality_type == "lge":
+            # Load lgesax (6 frames, keep all)
+            lge_volumes = self._load_lgesax(patient["patient_path"])
+            for i, vol in enumerate(lge_volumes):
+                if vol is not None:
+                    if self.normalize:
+                        vol = self._normalize_volume(vol)
+                    vol = self._random_augment(vol)
+                    loaded_volumes[f"lgesax_{i}"] = vol
 
-            lge1 = self._random_augment(lge1)
-            lge2 = self._random_augment(lge2)
-
-            loaded_volumes["lgesax"] = lge1
-            loaded_volumes["lgesax2"] = lge2
-
-        # For training: use the primary volume (lgesax preferred, else first available)
-        primary_mod = "lgesax" if "lgesax" in loaded_volumes else next(iter(loaded_volumes), None)
-        if primary_mod and loaded_volumes.get(primary_mod) is not None:
-            vol = loaded_volumes[primary_mod]
-            # Ensure 3D
-            if vol.ndim == 2:
-                vol = vol[:, :, np.newaxis]
-            elif vol.ndim == 4:
-                vol = vol[:, :, :, 0]  # Take first channel
+        # Use first available volume for training
+        if loaded_volumes:
+            first_key = list(loaded_volumes.keys())[0]
+            vol = loaded_volumes[first_key]
             patch = self._extract_patch(vol)
             result["volume"] = torch.from_numpy(patch).float()
         else:
             # Fallback: return zeros
             ps = self.patch_size
-            result["volume"] = torch.zeros(ps, ps, ps, dtype=torch.float32)
+            pd = self.patch_depth
+            result["volume"] = torch.zeros(ps, ps, pd, dtype=torch.float32)
 
         # Store all modalities for generation/export
         for mod_key, vol in loaded_volumes.items():
@@ -384,25 +470,35 @@ class CardiacMultiModalDataset(Dataset):
                 vol = vol[:, :, :, 0]
             result[f"vol_{mod_key}"] = torch.from_numpy(vol).float()
 
+        # Store modality counts
+        result["num_cinesax"] = len([k for k in loaded_volumes if k.startswith("cinesax")])
+        result["num_lgesax"] = len([k for k in loaded_volumes if k.startswith("lgesax")])
         result["num_modalities"] = len(loaded_volumes)
         return result
 
 
-def build_cardiac_dataloader(config: dict, stage: int = 1, batch_size: int = 2, num_workers: int = 4):
+def build_cardiac_dataloader(
+    config: dict,
+    modality_type: str = "cine",  # "cine" or "lge"
+    stage: int = 1,
+    batch_size: int = 4,
+    num_workers: int = 4
+):
     """Build a DataLoader from the YAML config dict."""
     from torch.utils.data import DataLoader
+
+    # Get model config based on modality_type
+    model_cfg = config["model"][modality_type]
 
     dataset = CardiacMultiModalDataset(
         root_dir=config["data"]["root_dir"],
         modality_mapping=config["data"]["modality_mapping"],
         disease_categories=config["data"]["disease_categories"],
         file_naming=config["data"]["file_naming"],
+        modality_type=modality_type,
         slice_alignment=config["data"]["slice_alignment"]["strategy"],
-        frame_selection=config["data"]["frame_selection"]["strategy"],
-        frame_index=config["data"]["frame_selection"]["frame_index"],
-        lge_slice_selection=config["data"]["lge_slice_selection"]["strategy"],
-        lge_slice_index=config["data"]["lge_slice_selection"]["slice_index"],
-        patch_size=config["model"]["autoencoder"]["patch_size"],
+        patch_size=model_cfg["autoencoder"]["patch_size"],
+        patch_depth=model_cfg["autoencoder"]["patch_depth"],
         stage=stage,
         augment=(stage == 1),
     )
