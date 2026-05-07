@@ -41,6 +41,8 @@ class CardiacMultiModalDataset(Dataset):
         file_naming: Dict[str, List[str]],
         modality_type: str = "cine",  # "cine" or "lge"
         slice_alignment: str = "mid_only",
+        frame_selection: str = "mid_only",
+        lge_frame_selection: str = "all_frames",
         patch_size: int = 128,
         patch_depth: int = 25,  # D维度：cine=25, lge=6
         stage: int = 1,
@@ -54,6 +56,8 @@ class CardiacMultiModalDataset(Dataset):
         self.file_naming = file_naming
         self.modality_type = modality_type
         self.slice_alignment = slice_alignment
+        self.frame_selection = frame_selection
+        self.lge_frame_selection = lge_frame_selection
         self.patch_size = patch_size
         self.patch_depth = patch_depth
         self.stage = stage
@@ -497,6 +501,8 @@ def build_cardiac_dataloader(
         file_naming=config["data"]["file_naming"],
         modality_type=modality_type,
         slice_alignment=config["data"]["slice_alignment"]["strategy"],
+        frame_selection=config["data"]["frame_selection"]["strategy"],
+        lge_frame_selection=config["data"]["lge_frame_selection"]["strategy"],
         patch_size=model_cfg["autoencoder"]["patch_size"],
         patch_depth=model_cfg["autoencoder"]["patch_depth"],
         stage=stage,

@@ -47,6 +47,8 @@ def verify_modality(config: dict, modality_type: str):
             file_naming=config['data']['file_naming'],
             modality_type=modality_type,
             slice_alignment=config['data']['slice_alignment']['strategy'],
+            frame_selection=config['data']['frame_selection']['strategy'],
+            lge_frame_selection=config['data']['lge_frame_selection']['strategy'],
             patch_size=model_cfg['autoencoder']['patch_size'],
             patch_depth=model_cfg['autoencoder']['patch_depth'],
             stage=1,

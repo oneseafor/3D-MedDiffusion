@@ -34,6 +34,15 @@ data:
   slice_alignment:
     strategy: "mid_only"
 
+  # Frame selection strategy for cine data (25 frames)
+  frame_selection:
+    strategy: "mid_only"  # Options: mid_only, average, stack, first, last
+    frame_index: 12       # Used when strategy is mid_only/first/last
+
+  # LGE frame selection strategy (6 frames)
+  lge_frame_selection:
+    strategy: "all_frames"  # Options: mid_only, average, all_frames, first, last
+
 # --- Model Architecture ---
 model:
   # Cine 模型 (cine4ch + cinesax, D=25)
