@@ -107,11 +107,25 @@ class CardiacMultiModalDataset(Dataset):
         return patients
 
     def _load_nifti_volume(self, filepath: Path) -> np.ndarray:
-        """Load a NIfTI file and return as numpy array."""
+        """Load a NIfTI file and return as numpy array.
+        Ensures 3D output with shape (H, W, D) where D is the smallest dimension."""
         try:
             import nibabel as nib
             img = nib.load(str(filepath))
             data = img.get_fdata().astype(np.float32)
+
+            # Remove extra dimensions (e.g., 4D with singleton)
+            if data.ndim == 4 and data.shape[3] == 1:
+                data = data[:, :, :, 0]
+
+            # Ensure 3D: (H, W, D) - D should be the smallest spatial dim
+            if data.ndim == 3:
+                h, w, d = data.shape
+                # If D is much larger than H,W, likely (D, H, W) format - transpose
+                if d > h and d > w and d > 30:
+                    # Assume first axis is D (slices/frames), transpose to (H, W, D)
+                    data = np.transpose(data, (1, 2, 0))
+
             return data
         except Exception as e:
             logger.warning(f"Failed to load {filepath}: {e}")
@@ -474,12 +488,13 @@ class CardiacMultiModalDataset(Dataset):
         vol_tensor = vol_tensor.unsqueeze(0)  # (1, D, H, W)
         result["data"] = vol_tensor
 
-        # Store all modalities for generation/export
+        # Store all modalities for generation/export (apply patch extraction for uniform size)
         for mod_key, vol in loaded_volumes.items():
             if vol.ndim == 2:
                 vol = vol[:, :, np.newaxis]
             elif vol.ndim == 4:
                 vol = vol[:, :, :, 0]
+            vol = self._extract_patch(vol)
             result[f"vol_{mod_key}"] = torch.from_numpy(vol).float()
 
         # Store modality counts
