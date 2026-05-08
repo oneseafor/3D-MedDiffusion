@@ -225,29 +225,40 @@ def main(args):
         # Get model config based on modality
         model_cfg = cardiac_config["model"][args.modality]
 
-        # Create cardiac dataset
-        dataset = CardiacMultiModalDataset(
-            root_dir=cardiac_config["data"]["root_dir"],
-            modality_mapping=cardiac_config["data"]["modality_mapping"],
-            disease_categories=cardiac_config["data"]["disease_categories"],
-            file_naming=cardiac_config["data"]["file_naming"],
-            modality_type=args.modality,
-            slice_alignment=cardiac_config["data"]["slice_alignment"]["strategy"],
-            frame_selection=cardiac_config["data"]["frame_selection"]["strategy"],
-            lge_frame_selection=cardiac_config["data"]["lge_frame_selection"]["strategy"],
-            patch_size=model_cfg["autoencoder"]["patch_size"],
-            patch_depth=model_cfg["autoencoder"]["patch_depth"],
-            stage=1,
-            augment=True,
-        )
+        # Use latent files for BiFlowNet training
+        # Latent files are saved by generate_training_latent.py
+        latent_dir = os.path.join(cardiac_config["training"]["output_root"], "latents", f"{args.modality}_latent")
+
+        if not os.path.exists(latent_dir):
+            raise FileNotFoundError(f"Latent directory not found: {latent_dir}. Run generate_training_latent.py first.")
+
+        # Use Singleres_dataset to load latent files
+        # Create a temporary JSON config for latent loading
+        # Key must be a number (disease category index) for Singleres_dataset
+        import json
+        import tempfile
+        # Use disease_categories from config to map patient disease to index
+        disease_categories = cardiac_config["data"]["disease_categories"]
+        latent_config = {}
+        for idx, disease in enumerate(disease_categories):
+            # Check if there are latent files for this disease
+            # For now, use a single key "0" to load all latents
+            latent_config[str(idx)] = latent_dir
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(latent_config, f)
+            latent_config_path = f.name
+
+        dataset = Singleres_dataset(root_dir=latent_config_path, resolution=model_cfg["diffusion"]["image_size"])
 
         # Update args with cardiac config
         args.batch_size = cardiac_config["training"][args.modality]["batch_size"]
         args.resolution = model_cfg["diffusion"]["image_size"]
         args.num_classes = len(cardiac_config["data"]["disease_categories"])
 
-        print(f"Using cardiac dataset for {args.modality} modality")
-        print(f"  Patients: {len(dataset)}")
+        print(f"Using cardiac latent dataset for {args.modality} modality")
+        print(f"  Latent dir: {latent_dir}")
+        print(f"  Samples: {len(dataset)}")
         print(f"  Resolution: {args.resolution}")
         print(f"  Batch size: {args.batch_size}")
     else:
