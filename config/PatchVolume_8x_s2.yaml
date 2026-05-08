@@ -5,9 +5,9 @@ model:
 
   gpus: 1
   default_root_dir: /home/kangchang.shen/out_put/3D-MedDiffusion/checkpoints/patchvolume_stage2
-  resume_from_checkpoint: /home/kangchang.shen/out_put/3D-MedDiffusion/checkpoints/patchvolume_stage1/last.ckpt
-  max_steps: 1000000
-  max_epochs: 10000
+  resume_from_checkpoint: /home/kangchang.shen/out_put/3D-MedDiffusion/checkpoints/patchvolume_stage1/my_model/version_6/checkpoints/latest_checkpoint.ckpt
+  max_steps: 50000
+  max_epochs: 200
   precision: 16
 
   perceptual_3d: False  

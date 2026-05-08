@@ -6,7 +6,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, ".."))
 sys.path.append(project_root)
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
 from torch.utils.data import DataLoader
 from AutoEncoder.model.PatchVolume import patchvolumeAE,AE_finetuning
@@ -110,6 +110,12 @@ def main(cfg_path: str, modality: str = None):
     callbacks.append(VolumeLogger(
         batch_frequency=1500, max_volumes=4, clamp=True))
     callbacks.append(AE_finetuning())
+    callbacks.append(EarlyStopping(
+        monitor='val/recon_loss',
+        patience=20,
+        mode='min',
+        verbose=True
+    ))
 
 
 
