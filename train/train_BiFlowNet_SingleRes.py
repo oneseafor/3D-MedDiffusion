@@ -227,7 +227,7 @@ def main(args):
 
         # Use latent files for BiFlowNet training
         # Latent files are saved by generate_training_latent.py
-        latent_dir = os.path.join(cardiac_config["training"]["output_root"], "latents", f"{args.modality}_latent")
+        latent_dir = os.path.join(cardiac_config["generation"]["output_root"], "latents", f"{args.modality}_latent")
 
         if not os.path.exists(latent_dir):
             raise FileNotFoundError(f"Latent directory not found: {latent_dir}. Run generate_training_latent.py first.")
