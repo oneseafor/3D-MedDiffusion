@@ -18,7 +18,7 @@ model:
   downsample: [1, 8, 8]  # D维度不下采样（时间帧）
   disc_channels: 32
   disc_layers: 3
-  discriminator_iter_start: 0
+  discriminator_iter_start: 5000
   disc_loss_type: hinge
   volume_gan_weight: 2
   l1_weight: 4.0
