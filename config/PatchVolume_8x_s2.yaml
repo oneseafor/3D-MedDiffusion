@@ -20,9 +20,9 @@ model:
   disc_layers: 3
   discriminator_iter_start: 5000
   disc_loss_type: hinge
-  volume_gan_weight: 2
+  volume_gan_weight: 0.1
   l1_weight: 4.0
-  gan_feat_weight: 4
+  gan_feat_weight: 0.5
   perceptual_weight: 2
   i3d_feat: False
   restart_thres: 1.0
