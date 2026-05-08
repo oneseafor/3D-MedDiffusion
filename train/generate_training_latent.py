@@ -66,7 +66,8 @@ def generate(args):
     for batch_idx, batch in enumerate(tr_dataloader):
         if args.modality:
             # Cardiac dataset returns dict
-            sample = batch["volume"].cuda()
+            # Use "data" key which has shape (B, C, D, H, W) instead of "volume" (B, H, W, D)
+            sample = batch["data"].cuda()
             patient_ids = batch["patient_id"]
         else:
             # Original dataset returns tuple
