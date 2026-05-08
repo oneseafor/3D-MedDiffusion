@@ -150,17 +150,31 @@ class patchvolumeAE(pl.LightningModule):
         
     def patch_encode(self, x,quantize = False,patch_size = 64):
         b,s1,s2,s3 = x.shape[0],x.shape[-3],x.shape[-2],x.shape[-1]
-        x = x.unfold(2,patch_size,patch_size).unfold(3,patch_size,patch_size).unfold(4,patch_size,patch_size)
-        x = rearrange(x , 'b c p1 p2 p3 d h w -> (b p1 p2 p3) c d h w')
-        h = self.pre_vq_conv(self.encoder(x))
-        if quantize == True:
-            vq_output = self.codebook(h)
-            embeddings = vq_output['embeddings']
+
+        # Check if all dimensions are >= patch_size for unfold
+        can_unfold = (s1 >= patch_size) and (s2 >= patch_size) and (s3 >= patch_size)
+
+        if can_unfold:
+            # Original path: unfold all dimensions
+            x = x.unfold(2,patch_size,patch_size).unfold(3,patch_size,patch_size).unfold(4,patch_size,patch_size)
+            x = rearrange(x , 'b c p1 p2 p3 d h w -> (b p1 p2 p3) c d h w')
+            h = self.pre_vq_conv(self.encoder(x))
+            if quantize == True:
+                vq_output = self.codebook(h)
+                embeddings = vq_output['embeddings']
+            else:
+                embeddings = h
+            embeddings = rearrange(embeddings, '(b p) c d h w -> b p c d h w', b=b)
+            embeddings = rearrange(embeddings, 'b (p1 p2 p3) c d h w -> b c (p1 d) (p2 h) (p3 w)',
+                    p1=s1//patch_size, p2=s2//patch_size, p3=s3//patch_size)
         else:
-            embeddings = h
-        embeddings = rearrange(embeddings, '(b p) c d h w -> b p c d h w', b=b) 
-        embeddings = rearrange(embeddings, 'b (p1 p2 p3) c d h w -> b c (p1 d) (p2 h) (p3 w)',
-                p1=s1//patch_size, p2=s2//patch_size, p3=s3//patch_size)
+            # D dimension too small (e.g., cardiac MRI): use directly
+            h = self.pre_vq_conv(self.encoder(x))
+            if quantize == True:
+                vq_output = self.codebook(h)
+                embeddings = vq_output['embeddings']
+            else:
+                embeddings = h
         return embeddings
 
     def patch_encode_sliding(self, x, quantize = False, patch_size = 64, sliding_window = 64):
