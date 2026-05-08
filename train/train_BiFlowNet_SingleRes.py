@@ -278,11 +278,22 @@ def main(args):
     logger.info(f"Training for {args.epochs} epochs...")
     for epoch in range(start_epoch,args.epochs):
         logger.info(f"Beginning epoch {epoch}...")
-        for z,y,res in loader:
+        for batch in loader:
+            # Handle both tuple format (original dataset) and dict format (cardiac dataset)
+            if isinstance(batch, dict):
+                # Cardiac dataset returns dict
+                z = batch["data"].to(device)  # (B, 1, D, H, W)
+                y = batch["disease_idx"].to(device)  # (B,)
+                # Create resolution tensor from args.resolution
+                res = torch.tensor(args.resolution).float().to(device) / 64.0
+                res = res.unsqueeze(0).expand(z.shape[0], -1)  # (B, 3)
+            else:
+                # Original dataset returns tuple (z, y, res)
+                z, y, res = batch
+                z = z.to(device)
+                y = y.to(device)
+                res = res.to(device)
             b = z.shape[0]
-            z = z.to(device)
-            y = y.to(device)
-            res = res.to(device)
             with autocast(enabled=amp):
                 t = torch.randint(0, diffusion.num_timesteps, (b,), device=device)
                 loss = diffusion.p_losses(model, z,t,y=y,res=res)
