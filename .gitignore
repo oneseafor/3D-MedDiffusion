@@ -38,9 +38,9 @@ Thumbs.db
 *.swp
 *~
 
-# Activity logs (keep template, ignore dates)
-活动日志/*.md
-!活动日志/README.md
+# Activity logs (sync with server)
+# 活动日志/*.md
+# !活动日志/README.md
 
 # AI assistant configs (local only)
 .claude/
