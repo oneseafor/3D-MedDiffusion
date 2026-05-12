@@ -660,18 +660,16 @@ class BiFlowNet(nn.Module):
 
         b = x.shape[0]
         ori_shape = (x.shape[2], x.shape[3], x.shape[4])
-        ori_shape_upscaled = (x.shape[2]*8, x.shape[3]*8, x.shape[4]*8)
         # time_rel_pos_bias = self.time_rel_pos_bias(x.shape[2], device=x.device)
-        x_IntraPatch = x.clone()
-        # x_IntraPatch.retain_grad()
         p = self.sub_volume_size[0]
-        # Pad dimensions to be divisible by sub_volume_size
-        pad_d = (p - x_IntraPatch.shape[2] % p) % p
-        pad_h = (p - x_IntraPatch.shape[3] % p) % p
-        pad_w = (p - x_IntraPatch.shape[4] % p) % p
+        # Pad all dimensions to be divisible by sub_volume_size
+        pad_d = (p - x.shape[2] % p) % p
+        pad_h = (p - x.shape[3] % p) % p
+        pad_w = (p - x.shape[4] % p) % p
         if pad_d > 0 or pad_h > 0 or pad_w > 0:
-            x_IntraPatch = F.pad(x_IntraPatch, (0, pad_w, 0, pad_h, 0, pad_d), mode='constant', value=0)
-        padded_shape_upscaled = (x_IntraPatch.shape[2]*8, x_IntraPatch.shape[3]*8, x_IntraPatch.shape[4]*8)
+            x = F.pad(x, (0, pad_w, 0, pad_h, 0, pad_d), mode='constant', value=0)
+        x_IntraPatch = x.clone()
+        padded_shape_upscaled = (x.shape[2]*8, x.shape[3]*8, x.shape[4]*8)
         x_IntraPatch = x_IntraPatch.unfold(2,p,p).unfold(3,p,p).unfold(4,p,p)
         p1 , p2 , p3= x_IntraPatch.size(2) , x_IntraPatch.size(3) , x_IntraPatch.size(4)
         x_IntraPatch = rearrange(x_IntraPatch , 'b c p1 p2 p3 d h w -> (b p1 p2 p3) c d h w')
