@@ -671,6 +671,7 @@ class BiFlowNet(nn.Module):
         pad_w = (p - x_IntraPatch.shape[4] % p) % p
         if pad_d > 0 or pad_h > 0 or pad_w > 0:
             x_IntraPatch = F.pad(x_IntraPatch, (0, pad_w, 0, pad_h, 0, pad_d), mode='constant', value=0)
+        padded_shape_upscaled = (x_IntraPatch.shape[2]*8, x_IntraPatch.shape[3]*8, x_IntraPatch.shape[4]*8)
         x_IntraPatch = x_IntraPatch.unfold(2,p,p).unfold(3,p,p).unfold(4,p,p)
         p1 , p2 , p3= x_IntraPatch.size(2) , x_IntraPatch.size(3) , x_IntraPatch.size(4)
         x_IntraPatch = rearrange(x_IntraPatch , 'b c p1 p2 p3 d h w -> (b p1 p2 p3) c d h w')
@@ -706,7 +707,7 @@ class BiFlowNet(nn.Module):
             Unet_feature = self.unpatchify_voxels(MlpLayer(x_IntraPatch,t_DiT))
             Unet_feature = rearrange(Unet_feature, '(b p) c d h w -> b p c d h w', b=b)
             Unet_feature = rearrange(Unet_feature, 'b (p1 p2 p3) c d h w -> b c (p1 d) (p2 h) (p3 w)',
-                        p1=ori_shape_upscaled[0]//self.vq_size, p2=ori_shape_upscaled[1]//self.vq_size, p3=ori_shape_upscaled[2]//self.vq_size)
+                        p1=padded_shape_upscaled[0]//self.vq_size, p2=padded_shape_upscaled[1]//self.vq_size, p3=padded_shape_upscaled[2]//self.vq_size)
             h_Unet.append(Unet_feature)
 
         for Block in self.IntraPatchFlow_mid:
@@ -717,9 +718,9 @@ class BiFlowNet(nn.Module):
             Unet_feature = self.unpatchify_voxels(MlpLayer(x_IntraPatch,t_DiT))
             Unet_feature = rearrange(Unet_feature, '(b p) c d h w -> b p c d h w', b=b)
             Unet_feature = rearrange(Unet_feature, 'b (p1 p2 p3) c d h w -> b c (p1 d) (p2 h) (p3 w)',
-                        p1=ori_shape_upscaled[0]//self.vq_size, p2=ori_shape_upscaled[1]//self.vq_size, p3=ori_shape_upscaled[2]//self.vq_size)
+                        p1=padded_shape_upscaled[0]//self.vq_size, p2=padded_shape_upscaled[1]//self.vq_size, p3=padded_shape_upscaled[2]//self.vq_size)
             h_Unet.append(Unet_feature)
-        
+
 
         for idx, (block1, spatial_attn1, block2, spatial_attn2,downsample) in enumerate(self.downs):
             if idx <self.feature_fusion :
