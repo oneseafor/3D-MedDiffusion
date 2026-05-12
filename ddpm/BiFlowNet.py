@@ -657,13 +657,20 @@ class BiFlowNet(nn.Module):
             self.cond_classes is not None
         ), "must specify y if and only if the model is class-conditional"
         # y = (y*0).to(torch.int)
-        
+
         b = x.shape[0]
-        ori_shape = (x.shape[2]*8,x.shape[3]*8,x.shape[4]*8) 
+        ori_shape = (x.shape[2], x.shape[3], x.shape[4])
+        ori_shape_upscaled = (x.shape[2]*8, x.shape[3]*8, x.shape[4]*8)
         # time_rel_pos_bias = self.time_rel_pos_bias(x.shape[2], device=x.device)
         x_IntraPatch = x.clone()
-        # x_IntraPatch.retain_grad() 
+        # x_IntraPatch.retain_grad()
         p = self.sub_volume_size[0]
+        # Pad dimensions to be divisible by sub_volume_size
+        pad_d = (p - x_IntraPatch.shape[2] % p) % p
+        pad_h = (p - x_IntraPatch.shape[3] % p) % p
+        pad_w = (p - x_IntraPatch.shape[4] % p) % p
+        if pad_d > 0 or pad_h > 0 or pad_w > 0:
+            x_IntraPatch = F.pad(x_IntraPatch, (0, pad_w, 0, pad_h, 0, pad_d), mode='constant', value=0)
         x_IntraPatch = x_IntraPatch.unfold(2,p,p).unfold(3,p,p).unfold(4,p,p)
         p1 , p2 , p3= x_IntraPatch.size(2) , x_IntraPatch.size(3) , x_IntraPatch.size(4)
         x_IntraPatch = rearrange(x_IntraPatch , 'b c p1 p2 p3 d h w -> (b p1 p2 p3) c d h w')
@@ -697,9 +704,9 @@ class BiFlowNet(nn.Module):
             x_IntraPatch = Block(x_IntraPatch,t_DiT)
             h_DiT.append(x_IntraPatch)
             Unet_feature = self.unpatchify_voxels(MlpLayer(x_IntraPatch,t_DiT))
-            Unet_feature = rearrange(Unet_feature, '(b p) c d h w -> b p c d h w', b=b) 
+            Unet_feature = rearrange(Unet_feature, '(b p) c d h w -> b p c d h w', b=b)
             Unet_feature = rearrange(Unet_feature, 'b (p1 p2 p3) c d h w -> b c (p1 d) (p2 h) (p3 w)',
-                        p1=ori_shape[0]//self.vq_size, p2=ori_shape[1]//self.vq_size, p3=ori_shape[2]//self.vq_size)
+                        p1=ori_shape_upscaled[0]//self.vq_size, p2=ori_shape_upscaled[1]//self.vq_size, p3=ori_shape_upscaled[2]//self.vq_size)
             h_Unet.append(Unet_feature)
 
         for Block in self.IntraPatchFlow_mid:
@@ -708,9 +715,9 @@ class BiFlowNet(nn.Module):
         for Block, MlpLayer in self.IntraPatchFlow_output:
             x_IntraPatch = Block(x_IntraPatch,t_DiT , h_DiT.pop())
             Unet_feature = self.unpatchify_voxels(MlpLayer(x_IntraPatch,t_DiT))
-            Unet_feature = rearrange(Unet_feature, '(b p) c d h w -> b p c d h w', b=b) 
+            Unet_feature = rearrange(Unet_feature, '(b p) c d h w -> b p c d h w', b=b)
             Unet_feature = rearrange(Unet_feature, 'b (p1 p2 p3) c d h w -> b c (p1 d) (p2 h) (p3 w)',
-                        p1=ori_shape[0]//self.vq_size, p2=ori_shape[1]//self.vq_size, p3=ori_shape[2]//self.vq_size)
+                        p1=ori_shape_upscaled[0]//self.vq_size, p2=ori_shape_upscaled[1]//self.vq_size, p3=ori_shape_upscaled[2]//self.vq_size)
             h_Unet.append(Unet_feature)
         
 
@@ -741,7 +748,10 @@ class BiFlowNet(nn.Module):
             x = upsample(x)
 
         x = torch.cat((x, r), dim=1)
-        return self.final_conv(x)
+        x = self.final_conv(x)
+        # Crop back to original size if padding was applied
+        x = x[:, :, :ori_shape[0], :ori_shape[1], :ori_shape[2]]
+        return x
     def unpatchify_voxels(self, x0):
         """
         input: (N, T, patch_size * patch_size * patch_size * C)    (N, 64, 8*8*8*3)
