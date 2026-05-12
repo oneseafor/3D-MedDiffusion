@@ -135,6 +135,11 @@ training:
       loss_type: "l2"
       ema_decay: 0.995
 
+# --- Latent Directory ---
+# Directory where generate_training_latent.py saves latent files
+# If not specified, defaults to {generation.output_root}/latents
+latent_dir: "/home/kangchang.shen/out_put/3D-MedDiffusion/latents"
+
 # --- Generation / Export ---
 generation:
   output_root: "/home/kangchang.shen/out_put/3D-MedDiffusion/synthetic_data"
