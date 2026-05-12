@@ -9,7 +9,7 @@ import numpy as np
 import json 
 import torchio as tio
 class Singleres_dataset(Dataset):
-    def __init__(self, root_dir=None, resolution= [32,32,32], generate_latents= False):
+    def __init__(self, root_dir=None, resolution= [32,32,32], generate_latents= False, no_suffix= False):
         self.all_files = []
         self.resolution = resolution
         self.generate_latents = generate_latents
@@ -18,10 +18,10 @@ class Singleres_dataset(Dataset):
                 dataroots = json.load(json_file)
 
             for key,value in dataroots.items():
-                if not generate_latents:
+                if not generate_latents and not no_suffix:
                     value = value+'_latents'
                 file_paths =  glob.glob(value+'/*.nii.gz', recursive=True)
-                if len(file_paths[0]) == 0:
+                if len(file_paths) == 0:
                     raise FileNotFoundError(f"No .nii.gz files found in directory: {value}")
                 for file_path in file_paths:
                     self.all_files.append({key:file_path})

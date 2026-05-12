@@ -243,15 +243,15 @@ def main(args):
         disease_categories = cardiac_config["data"]["disease_categories"]
         latent_config = {}
         for idx, disease in enumerate(disease_categories):
-            # Check if there are latent files for this disease
-            # For now, use a single key "0" to load all latents
+            # All latents are in same directory, use latent_dir directly
             latent_config[str(idx)] = latent_dir
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
             json.dump(latent_config, f)
             latent_config_path = f.name
 
-        dataset = Singleres_dataset(root_dir=latent_config_path, resolution=model_cfg["diffusion"]["image_size"])
+        # no_suffix=True because latent_dir already contains the full path with _latent suffix
+        dataset = Singleres_dataset(root_dir=latent_config_path, resolution=model_cfg["diffusion"]["image_size"], no_suffix=True)
 
         # Update args with cardiac config
         args.batch_size = cardiac_config["training"][args.modality]["batch_size"]
