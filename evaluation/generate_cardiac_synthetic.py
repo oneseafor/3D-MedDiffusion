@@ -134,11 +134,8 @@ def main(args):
 
                 # Decode latent to volume
                 print(f"  Sample {sample_idx + 1}/{args.samples_per_disease}: Decoding volume...")
-                if args.mode == "patch":
-                    volume = AE.decode(samples, quantize=True)
-                else:
-                    # Use sliding window for full resolution
-                    volume = AE.decode_sliding(samples, quantize=True)
+                # For cardiac MRI, always use AE.decode() since D=25 is not divisible by compress_ratio=8
+                volume = AE.decode(samples, quantize=True)
 
                 # Save volume
                 volume = volume.detach().squeeze(0).cpu()
