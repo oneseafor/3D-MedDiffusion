@@ -39,16 +39,13 @@ DISEASE_MAPPING = {
 }
 
 # Resolution mapping for cardiac MRI
-# Latent space: [25, 16, 16] -> Decoded: [25, 128, 128] (patch)
-# For full resolution: [25, 32, 32] -> Decoded: [25, 256, 256]
+# Latent space: [25, 16, 16] -> Decoded: [25, 128, 128] (patch mode, model was trained on this)
+# Note: Current BiFlowNet was trained with image_size=[25, 16, 16], so max output is ~128x128x25
+# To get 256x256x25, would need to train a new model with image_size=[25, 32, 32]
 RESOLUTION_MAPPING = {
     "patch": {
         "latent_size": (25, 16, 16),
         "output_size": "128x128x25",
-    },
-    "full": {
-        "latent_size": (25, 32, 32),
-        "output_size": "256x256x25",
     },
 }
 
@@ -160,8 +157,8 @@ if __name__ == "__main__":
     parser.add_argument("--AE-ckpt", type=str, required=True, help="Path to AutoEncoder checkpoint")
     parser.add_argument("--model-ckpt", type=str, required=True, help="Path to BiFlowNet checkpoint")
     parser.add_argument("--output-dir", type=str, required=True, help="Output directory")
-    parser.add_argument("--mode", type=str, default="patch", choices=["patch", "full"],
-                        help="Generation mode: 'patch' (128x128) or 'full' (256x256)")
+    parser.add_argument("--mode", type=str, default="patch", choices=["patch"],
+                        help="Generation mode: 'patch' (128x128) - model was trained on this size")
     parser.add_argument("--samples-per-disease", type=int, default=1,
                         help="Number of samples per disease category")
     parser.add_argument("--num-classes", type=int, default=7, help="Number of disease classes")
