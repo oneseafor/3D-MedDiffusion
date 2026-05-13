@@ -167,7 +167,7 @@ if __name__ == "__main__":
                         help="Generation mode: 'patch' (128x128) or 'full' (256x256)")
     parser.add_argument("--samples-per-disease", type=int, default=1,
                         help="Number of samples per disease category")
-    parser.add_argument("--num-classes", type=int, default=5, help="Number of disease classes")
+    parser.add_argument("--num-classes", type=int, default=7, help="Number of disease classes")
     parser.add_argument("--timesteps", type=int, default=1000, help="Diffusion timesteps")
     parser.add_argument("--model-dim", type=int, default=72, help="Model dimension")
     parser.add_argument("--dim-mults", nargs='+', type=int, default=[1, 1, 2, 4, 8])
